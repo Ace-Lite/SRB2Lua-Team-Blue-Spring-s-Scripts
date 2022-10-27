@@ -1,3 +1,8 @@
+//
+// Team Blue Spring's Series of Libaries. 
+// General library for things like MATH extensions
+//
+
 local TBSlib = {
 	stringversion = '0.015',
 	iteration = 2,

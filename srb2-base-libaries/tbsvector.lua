@@ -1,3 +1,8 @@
+//
+// Team Blue Spring's Series of Libaries. 
+// Simple Vector Library
+//
+
 local libVec = {
 	stringversion = '1.1',
 	iteration = 2,

@@ -1,3 +1,9 @@
+//
+// Team Blue Spring's Series of Libaries. 
+// Waypoint Library
+//
+
+
 local libWay = {
 	stringversion = '0.1',
 	iteration = 1,
