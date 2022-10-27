@@ -1,0 +1,69 @@
+local libVec = {
+	stringversion = '1.1',
+	iteration = 2,
+}
+
+//Vector libary
+
+
+// Example:
+// Vector 1(2D or 3D) + Vector 2(2D or 3D) = result Vector
+
+-- tbsVec.Add(v1, v2)
+
+libVec.Add = function(v1, v2)
+	return {v1[1] + v2[1], v1[2] + v2[2], (v1[3] or 0) + (v2[3] or 0)}
+end
+
+// Example:
+// Vector 1(2D or 3D) - Vector 2(2D or 3D) = result Vector
+
+-- tbsVec.Sub(v1, v2)
+
+libVec.Sub = function(v1, v2)
+	return {v1[1] - v2[1], v1[2] - v2[2], (v1[3] or 0) - (v2[3] or 0)}
+end
+
+// Example:
+// Dist
+
+-- tbsVec.Dist(v1, v2, boolean)
+
+libVec.Dist = function(v1, v2, fx)
+	if fx then
+		local result = {FixedMul(v1[1], v1[1]) + FixedMul(v2[1], v2[1]),
+		FixedMul(v1[2], v1[2]) + FixedMul(v2[2], v2[2]), 
+		FixedMul((v1[3] or 0), (v1[3] or 0)) + FixedMul((v2[3] or 0), (v2[3] or 0))}	
+	else
+		local result = {v1[1] + v2[1], v1[2] + v2[2], (v1[3] or 0) + (v2[3] or 0)}		
+	end
+	
+	return result
+end
+
+libVec.Rotate = function(v, fixedpoint, hangle, vangle)
+	local xsin = sin()
+	local ycos = cos()
+	local vector = {v[1], v[2], (v[3] or 0)}
+	
+	vector[1] = fixedpoint and v[1]/FRACUNIT*cos(hangle) or v[1]*cos(hangle)
+	vector[2] = fixedpoint and v[2]/FRACUNIT*sin(hangle) or v[2]*sin(hangle)
+	
+	if vangle then
+		vector[3] = fixedpoint and v[3]/FRACUNIT*sin(vangle) or v[3]*sin(vangle)
+	end
+	
+	return vector
+end
+
+libVec.objPush = function(mobj, v)
+	mobj.momx = v[1]
+	mobj.momy = v[2]
+	mobj.momz = v[3] 
+end
+
+libVec.setObjOrg = function(mobj, v)
+	P_TeleportMove(mobj, mobj.x+v[1], mobj.y+v[2], mobj.z+v[3])
+end
+
+rawset(_G, "tbsVec", libVec)
