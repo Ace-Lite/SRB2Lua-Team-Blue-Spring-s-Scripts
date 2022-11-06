@@ -208,14 +208,25 @@ local SwitchEasing = {
 local function WaypointSetup(a, mt)
 	if not (Waypoints[mt.args[0]]) then
 		Waypoints[mt.args[0]] = {}
+		Waypoints[mt.args[0]].timeline = {}
+	end
+	
+	if not Waypoints[mt.args[0]][mt.args[1]] then
+		table.insert(Waypoints[mt.args[0]].timeline, mt.args[1])
+		table.sort(Waypoints[mt.args[0]].timeline, function(a, b) return a < b end)
+	
+		Waypoints[mt.args[0]][mt.args[1]] = {starttics = 0; x = mt.x*FRACUNIT; y = mt.y*FRACUNIT; z = a.z; angle = mt.angle*ANG1; 
+		spawnpoint = {args = mt.args; stringargs = mt.stringargs}}
+		
+		Waypoints[mt.args[0]].tics = 0
+		for k,v in ipairs(Waypoints[mt.args[0]]) do
+			if k <= mt.args[1] then
+				Waypoints[mt.args[0]][mt.args[1]].starttics = $+Waypoints[mt.args[0]][k].spawnpoint.args[3]*TICRATE
+			end
+			Waypoints[mt.args[0]].tics = $+Waypoints[mt.args[0]][k].spawnpoint.args[3]*TICRATE
+		end
 	end
 
-	local currentset = Waypoints[mt.args[0]]
-	
-	Waypoints[mt.args[0]][#currentset+1] = 
-	{x = mt.x*FRACUNIT; y = mt.y*FRACUNIT; z = a.z; angle = mt.angle*ANG1; 
-	spawnpoint = {args = {[0] = mt.args[0], mt.args[1], mt.args[2], mt.args[3], mt.args[4], mt.args[5], mt.args[6], mt.args[7], mt.args[8], mt.args[9]}; 
-				 stringargs = {[0] = mt.stringargs[0], mt.stringargs[1]};};}
 	P_RemoveMobj(a)
 end
 
@@ -235,18 +246,43 @@ end
 //	mobj.spawnpoint.tag 	-- Used for tagging object to path and activation
 //
 
-local function P_WaypointTotalTics(waypoint, l, b)
-	local tics = 0 
-	if #waypoint > 1 then
-		for k,v in ipairs(waypoint) do
-			local prevwaypoint = waypoint[k-1] or nil
-			tics = $+(l and v.spawnpoint.args[3] or (prevwaypoint and prevwaypoint.spawnpoint.args[3] or 1))*TICRATE
-			if b and k >= b then
-				break
-			end
+local function Path_CheckPositionInWaypoints(current, list)
+	local nextway, prevway = 0, 0
+
+	local nextone = false
+	for k, v in ipairs(list) do
+		if nextone then 
+			nextway = v
+			break
+		end
+		
+		if v == current and not nextone then 
+			nextone = true 
+		else	
+			prevway = v
 		end
 	end
-	return tics
+
+	if not nextway then
+		nextway = list[1]
+	end
+
+	if not prevway then
+		prevway = list[#list]
+	end
+
+	return nextway, prevway
+end
+
+local function Path_IfNextPoint(data, progress)
+	if progress == FRACUNIT then
+		data.pos = data.nextway
+		data.progress = Waypoints[data.id][data.nextway].starttics+1
+	end
+	if progress == 0 then
+		data.progress = Waypoints[data.id][data.prevway].starttics+(Waypoints[data.id][data.pos].spawnpoint.args[3]*TICRATE)-1
+		data.pos = data.prevway
+	end	
 end
 
 //
@@ -261,12 +297,18 @@ local CC_RESETPOSTOZ = 8	-- 	When there is no next waypoint, teleport at 0
 local CC_IFZEROACTIV = 16	-- 	If on pos 0, it will require outside activation
 local CC_REVERSEMOVE = 32	-- 	Reverse Movement
 local CC_GRAVITYFORC = 64	-- 	Only manipulate X|Y
+local CC_DONTTELEPOR = 128	-- 	Doesn't teleport object to start
+
+local test = 0
 
 local function ControllerThinker(mobj)
 	if not (mobj.spawnpoint or TaggedObj[mobj.spawnpoint.tag]) then return end
 	for _,a in ipairs(TaggedObj[mobj.spawnpoint.tag]) do
 		
 		if not (a and a.valid) then return end
+		
+		if not test then test = a end
+		
 		
 		//
 		//	GENERAL
@@ -277,71 +319,40 @@ local function ControllerThinker(mobj)
 			a.tbswaypoint = {
 				id = mobj.spawnpoint.args[0];
 				pos = mobj.spawnpoint.args[1];
-				progress = 1;
-				nextway = WPdummy[mobj.spawnpoint.args[1]+1] and mobj.spawnpoint.args[1]+1 or 1;
-				prevway = WPdummy[mobj.spawnpoint.args[1]-1] and mobj.spawnpoint.args[1]-1 or #WPdummy;
+				progress = WPdummy[mobj.spawnpoint.args[1]].starttics;
 			}
-		end
-	
-		if not (Waypoints[a.tbswaypoint.id].tics) then
-			Waypoints[a.tbswaypoint.id].tics = P_WaypointTotalTics(Waypoints[a.tbswaypoint.id], true)
-			for k,v in ipairs(Waypoints[a.tbswaypoint.id]) do
-				v.starttics = P_WaypointTotalTics(Waypoints[a.tbswaypoint.id], false, k)
-			end
+			a.tbswaypoint.nextway, a.tbswaypoint.prevway = Path_CheckPositionInWaypoints(a.tbswaypoint.pos, Waypoints[a.tbswaypoint.id].timeline)
 		end
 			
 		//
 		//	PROGRESSION
 		//
-
-		if a.tbswaypoint.progress > 0 then
-			if a.tbswaypoint.nextway > 1 then
-				if a.tbswaypoint.progress > Waypoints[a.tbswaypoint.id][a.tbswaypoint.nextway].starttics then 
-					a.tbswaypoint.pos = a.tbswaypoint.nextway
-				end
-
-				if a.tbswaypoint.progress < Waypoints[a.tbswaypoint.id][a.tbswaypoint.pos].starttics then				
-					a.tbswaypoint.pos = a.tbswaypoint.prevway
-				end
-			else
-				if a.tbswaypoint.progress >= Waypoints[a.tbswaypoint.id].tics then
-					a.tbswaypoint.progress = 1
-					a.tbswaypoint.pos = a.tbswaypoint.nextway
-				end
-			end
-		else
-			local WPdummy = Waypoints[mobj.spawnpoint.args[0]]			
-			a.tbswaypoint.progress = Waypoints[a.tbswaypoint.id].tics-1
-			a.tbswaypoint.pos = #WPdummy
-		end
 		
 		if not (mobj.spawnpoint.args[3] & CC_REVERSEMOVE) then
 			a.tbswaypoint.progress = $+1
 		else
-			a.tbswaypoint.progress = $-1			
+			a.tbswaypoint.progress = $-1
 		end
-
 
 		local waypointobj = Waypoints[a.tbswaypoint.id][a.tbswaypoint.pos]
 		local waypointinfo = Waypoints[a.tbswaypoint.id][a.tbswaypoint.pos].spawnpoint
-
-		local nextwaycheck = Waypoints[a.tbswaypoint.id][a.tbswaypoint.pos+1]		
-		a.tbswaypoint.prevway = a.tbswaypoint.pos
-			
-		if (nextwaycheck and a.tbswaypoint.nextway ~= nextwaycheck.spawnpoint.args[1]) then
-			a.tbswaypoint.nextway = nextwaycheck.spawnpoint.args[1]
-		elseif (not nextwaycheck) then 
-			a.tbswaypoint.nextway = 1
-		end
+		local progress = ((a.tbswaypoint.progress-waypointobj.starttics)*FRACUNIT)/(waypointinfo.args[3]*TICRATE)		
 		
+		if progress == 0 or progress == FRACUNIT then
+			Path_IfNextPoint(a.tbswaypoint, progress)
+			a.tbswaypoint.nextway, a.tbswaypoint.prevway = Path_CheckPositionInWaypoints(a.tbswaypoint.pos, Waypoints[a.tbswaypoint.id].timeline)			
+		end
+
 	
 		//
 		//	POSITION
 		//		
-		
+
+		waypointobj = Waypoints[a.tbswaypoint.id][a.tbswaypoint.pos]	
+		waypointinfo = Waypoints[a.tbswaypoint.id][a.tbswaypoint.pos].spawnpoint
+		progress = ((a.tbswaypoint.progress-waypointobj.starttics)*FRACUNIT)/(waypointinfo.args[3]*TICRATE)	
+	
 		local nextwaypoint = Waypoints[a.tbswaypoint.id][a.tbswaypoint.nextway]
-		local progress = ((a.tbswaypoint.progress-waypointobj.starttics)*FRACUNIT)/(waypointinfo.args[3]*TICRATE)
-		
 		local x = SwitchEasing[waypointinfo.args[2]](progress, waypointobj.x/FRACUNIT, nextwaypoint.x/FRACUNIT)
 		local y = SwitchEasing[waypointinfo.args[2]](progress, waypointobj.y/FRACUNIT, nextwaypoint.y/FRACUNIT)
 		local z = SwitchEasing[waypointinfo.args[2]](progress, waypointobj.z/FRACUNIT, nextwaypoint.z/FRACUNIT)
