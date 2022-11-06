@@ -299,16 +299,11 @@ local CC_REVERSEMOVE = 32	-- 	Reverse Movement
 local CC_GRAVITYFORC = 64	-- 	Only manipulate X|Y
 local CC_DONTTELEPOR = 128	-- 	Doesn't teleport object to start
 
-local test = 0
-
 local function ControllerThinker(mobj)
 	if not (mobj.spawnpoint or TaggedObj[mobj.spawnpoint.tag]) then return end
 	for _,a in ipairs(TaggedObj[mobj.spawnpoint.tag]) do
 		
-		if not (a and a.valid) then return end
-		
-		if not test then test = a end
-		
+
 		
 		//
 		//	GENERAL
@@ -386,6 +381,91 @@ local function ControllerThinker(mobj)
 		
 	end
 end
+
+local cameratbswp = {
+	active = false;
+	id = 0;
+	pos = 0;
+	progress = 0;
+	nextway = 0;
+	prevway = 0;
+}
+
+local function CameraControllerThinker(mobj)
+	if not (mobj.spawnpoint or TaggedObj[mobj.spawnpoint.tag]) then return end
+	for _,a in ipairs(TaggedObj[mobj.spawnpoint.tag]) do
+		
+
+		//
+		//	GENERAL
+		//
+		
+		if not (cameratbswp.active) then
+			local WPdummy = Waypoints[mobj.spawnpoint.args[0]]
+			cameratbswp = {
+				active = true;
+				id = mobj.spawnpoint.args[0];
+				pos = mobj.spawnpoint.args[1];
+				progress = WPdummy[mobj.spawnpoint.args[1]].starttics;
+			}
+			cameratbswp.nextway, cameratbswp.prevway = Path_CheckPositionInWaypoints(cameratbswp.pos, Waypoints[cameratbswp.id].timeline)
+		end
+			
+		//
+		//	PROGRESSION
+		//
+		
+		if not (mobj.spawnpoint.args[3] & CC_REVERSEMOVE) then
+			cameratbswp.progress = $+1
+		else
+			cameratbswp.progress = $-1
+		end
+
+		local waypointobj = Waypoints[cameratbswp.id][cameratbswp.pos]
+		local waypointinfo = Waypoints[cameratbswp.id][cameratbswp.pos].spawnpoint
+		local progress = ((cameratbswp.progress-waypointobj.starttics)*FRACUNIT)/(waypointinfo.args[3]*TICRATE)		
+		
+		if progress == 0 or progress == FRACUNIT then
+			Path_IfNextPoint(cameratbswp, progress)
+			cameratbswp.nextway, cameratbswp.prevway = Path_CheckPositionInWaypoints(cameratbswp.pos, Waypoints[cameratbswp.id].timeline)			
+		end
+
+	
+		//
+		//	POSITION
+		//		
+
+		waypointobj = Waypoints[cameratbswp.id][cameratbswp.pos]	
+		waypointinfo = Waypoints[cameratbswp.id][cameratbswp.pos].spawnpoint
+		progress = ((cameratbswp.progress-waypointobj.starttics)*FRACUNIT)/(waypointinfo.args[3]*TICRATE)	
+	
+		local nextwaypoint = Waypoints[cameratbswp.id][cameratbswp.nextway]
+		local x = SwitchEasing[waypointinfo.args[2]](progress, waypointobj.x/FRACUNIT, nextwaypoint.x/FRACUNIT)
+		local y = SwitchEasing[waypointinfo.args[2]](progress, waypointobj.y/FRACUNIT, nextwaypoint.y/FRACUNIT)
+		local z = SwitchEasing[waypointinfo.args[2]](progress, waypointobj.z/FRACUNIT, nextwaypoint.z/FRACUNIT)
+
+	
+		camera.angle = SwitchEasing[waypointinfo.args[2]](progress, waypointobj.angle, nextwaypoint.angle)
+		P_TeleportCameraMove(camera, x*FRACUNIT, y*FRACUNIT, z*FRACUNIT)
+
+		//	Action
+		if waypointinfo.args[7] > 0 and waypointinfo.args[7] <= #NumToStringAction then
+			StringtoFunctionA[NumToStringAction[waypointinfo.args[7]]](camera, var1, var2)
+		end
+		
+
+		//
+		//	SPECIAL CASES
+		//
+		
+		if waypointinfo.args[6] & WC_DOWNMOBJ then
+			table.remove(TaggedObj, mobj.spawnpoint.tag)
+			P_RemoveMobj(mobj)
+		end
+		
+	end
+end
+
 
 
 //
