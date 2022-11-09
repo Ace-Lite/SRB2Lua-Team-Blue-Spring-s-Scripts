@@ -62,8 +62,11 @@ libVec.Rotate = function(v, fixedpoint, hangle, vangle)
 end
 
 libVec.objPush = function(mobj, v)
+	if not v[1] and v[2] then return end
 	mobj.momx = v[1]
 	mobj.momy = v[2]
+	
+	if not v[3] then return end	
 	mobj.momz = v[3] 
 end
 

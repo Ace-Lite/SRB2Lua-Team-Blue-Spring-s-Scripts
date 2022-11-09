@@ -472,8 +472,8 @@ local function CameraControllerThinker(mobj)
 	//	SPECIAL CASES
 	//
 		
-	if waypointinfo.args[6] & WC_DOWNMOBJ then
-		table.remove(TaggedObj, mobj.spawnpoint.tag)
+	if nextwaypoint.spawnpoint.args[6] & WC_DOWNMOBJ and progress == (FRACUNIT-1) then
+		cameratbswp.active = false
 		P_RemoveMobj(mobj)
 	end
 
