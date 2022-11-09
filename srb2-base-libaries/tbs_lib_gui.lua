@@ -249,6 +249,11 @@ TBS_Menu.confirmButtom = function(self, sel)
 		pick.func(self.menutypes[self.menu])
 		return true
 	end
+
+	if self.style[self.menu].sounds and self.style[self.menu].sounds.select then
+		S_StartSound(nil, self.style[self.menu].sounds.select, consoleplayer)
+	end
+
 	return false
 end
 
@@ -281,6 +286,10 @@ TBS_Menu.scrollMenuItems = function(self, move)
 		M_selectionItemMMM(move, #Current_Menu, true)		
 	end
 
+	if self.style[self.menu].sounds and self.style[self.menu].sounds.scroll then
+		S_StartSound(nil, self.style[self.menu].sounds.scroll, consoleplayer)
+	end
+
 	if move then
 		if not (self.edgescr or Current_Menu[#Current_Menu].z <= Current_Menu[self.selection].z+self.styles[self.menu].limitz[3] 
 		or Current_Menu[#Current_Menu].z <= (self.styles[self.menu].limitz[2]+15)) then
@@ -294,6 +303,19 @@ TBS_Menu.scrollMenuItems = function(self, move)
 	end
 end
 
+local prev_music = nil
+
+-- TBS_Menu:playMusic()
+TBS_Menu.playMusic = function(self)
+	if not prev_music then
+		prev_music = S_MusicName(consoleplayer) 
+	end
+
+	if self.style[self.menu].music and self.style[self.menu].music ~= S_MusicName(consoleplayer) then
+		S_ChangeMusic(self.style[self.menu].music, true, player)
+	end	
+
+end
 
 
 local function M_selectionMenu(move)
@@ -512,6 +534,8 @@ hud.add(function(v, stplyr)
 		TBS_Menu.mouse_x = min(max(TBS_Menu.mouse_x+mouse.dx/10, 0), v.width()/v.dupx())
 		TBS_Menu.mouse_y = min(max(TBS_Menu.mouse_y+mouse.dy/10, 0), v.height()/v.dupy())
 		
+		TBS_Menu:playMusic()
+
 		if mouse.dx or mouse.dy then
 			TBS_Menu.mouse_visible = true
 		end
@@ -557,6 +581,8 @@ hud.add(function(v, stplyr)
 		v.draw(170+name_len+right_key.width+vibes, 8+right_key.height/2, right_arrow, 0)
 		
 		v.drawString(165, 9, menu_name, 0, "center")
+	else
+		prev_music = nil
 	end	
 end, "game")
 
