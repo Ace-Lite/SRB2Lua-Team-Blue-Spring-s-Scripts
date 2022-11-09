@@ -47,8 +47,6 @@ libVec.Dist = function(v1, v2, fx)
 end
 
 libVec.Rotate = function(v, fixedpoint, hangle, vangle)
-	local xsin = sin()
-	local ycos = cos()
 	local vector = {v[1], v[2], (v[3] or 0)}
 	
 	vector[1] = fixedpoint and v[1]/FRACUNIT*cos(hangle) or v[1]*cos(hangle)
@@ -62,12 +60,12 @@ libVec.Rotate = function(v, fixedpoint, hangle, vangle)
 end
 
 libVec.objPush = function(mobj, v)
-	if not v[1] and v[2] then return end
+	if v[1] == nil or v[2] == nil then return end
 	mobj.momx = v[1]
 	mobj.momy = v[2]
-	
-	if not v[3] then return end	
-	mobj.momz = v[3] 
+
+	if v[3] == nil then return end	
+	mobj.momz = v[3]
 end
 
 libVec.setObjOrg = function(mobj, v)
