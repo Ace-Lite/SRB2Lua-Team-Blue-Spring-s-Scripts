@@ -104,8 +104,27 @@ TBSlib.atan = function(x)
     return atan(x)  
 end
 
+// shoots a ray, in direction of choosing. 
+--TBSlib.shootRay(vector3 origin, angle_t angleh, angle_t anglev)
+TBSlib.ray = function(origin, angleh, anglev)
+	if not (origin and origin == {} and origin.x and origin.y and origin.z and angleh and anglev) then return end
+
+	local ray = P_SpawnMobj(origin.x, origin.y, origin.z, MT_RAY)
+	P_TeleportMove(origin.x, origin.y, origin.z+P_ReturnThrustY(ray, anglev, INT8_MAX))
+	P_InstaThrust(ray, angleh, INT8_MAX)
+	ray.fuse = 1
+
+	return {ray.x, ray.y, ray.z}
+end
+
+// Lerp
+--TBSlib.lerp(t, a, b)
+TBSlib.lerp = function(t, a, b)
+	return FixedMul(a + (b - a), t)
+end
+
 //TBS's Fixedpoint interpretation of Roblox's lua doc interpretation's of Bezier's curves.
-	
+--TBSlib.quadBezier(t, p0, p1, p2)
 TBSlib.quadBezier = function(t, p0, p1, p2)
 	return FixedMul(pow(FRACUNIT - t, 2), p0) + 2 * FixedMul(FixedMul(FRACUNIT - t, t), p1) + FixedMul(pow(t, 2), p2)
 end
