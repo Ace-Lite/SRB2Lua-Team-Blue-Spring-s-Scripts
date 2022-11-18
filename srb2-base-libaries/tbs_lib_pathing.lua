@@ -32,7 +32,6 @@ local debug = CV_RegisterVar({
 //	-- Figure out path-target approximation (2D kind and 3D kind and special camera kind)
 //	-- Flag - approximate momentum after pathing ends (rockets etc.)
 //	-- Entrance point approximation (Camera will need it for etrance state)
-//	-- Player Anim speed calculation
 //	-- Looping types
 //
 
@@ -295,6 +294,40 @@ libWay.lerpPlayToPoint = function(self, a, target, t)
 	a.roll = roll
 end
 
+-- direct
+libWay.directionPos = function(a, path_angle)
+	local ang = a.angle+path_angle
+	if ang < ANGLE_180 and ang > ANGLE_MAX then
+		return 1
+	else
+		return -1
+	end
+end
+
+libWay.directPosPerMomentum = function(self, a, path_angle)
+	local direction = self:directionPos(a, path_angle)
+	local momentum = FixedHypot(a.momz, FixedHypot(a.momx, a.momy))
+	if momentum then
+		return direction
+	else
+		return 0
+	end
+end
+
+
+
+
+local function Math_CheckPositive(num)
+	if num > 0 then
+		return true
+	elseif num == 0 then
+		return nil
+	else
+		return false
+	end
+end
+
+
 local function Path_CheckPositionInWaypoints(current, list)
 	local nextway, prevway = 0, 0
 
@@ -334,6 +367,47 @@ local function Path_IfNextPoint(data, progress)
 	end	
 end
 
+libWay.closestPathToTarget = function(pathway, target)
+	local distancefirst = INT32_MAX
+	local point_idfirst = 0
+	local distancesecond = INT32_MAX
+	local point_idsecond = 0
+	
+	local dropDist = {}
+
+	for k,p in ipairs(pathway) do
+		local disttarget = P_AproxDistance(target.z - p.z, P_AproxDistance(target.x - p.x, target.y - p.y))
+		dropDist:insert(disttarget, k)
+		if distancefirst > disttarget then
+			distancefirst = disttarget
+			point_idfirst = k
+		end
+	end
+
+	for k,p in ipair(dropDist) do
+		if distancefirst < distancesecond and distancesecond > p then
+			distancesecond = p
+			point_idsecond = k
+		end
+	end
+
+	return distancefirst, point_idfirst, distancesecond, point_idsecond
+end
+
+-- less accurate approximation
+libWay.approxDistToTarget = function(self, pathway, target)
+	local distf, idf, dists, ids = self:closestPointToTarget(pathway, target)
+	
+	local pointdist = P_AproxDistance(pathway[idf].z - pathway[ids].z, 
+	P_AproxDistance(pathway[idf].x - pathway[ids].x, pathway[idf].y - pathway[ids].y))
+
+	local duration = pathway[idf].waypointinfo.args[3]*TICRATE*FRACUNIT
+	local starttime = pathway[idf].starttics
+	
+	local pyth = FixedSqrt(-(FixedMul(distf, distf)-FixedMul(dists, dists)))
+
+	return starttime+FixedMul(FixedDiv(pyth, pointdist), duration)/FRACUNIT
+end
 
 libWay.calAvgSpeed = function(container, path, way, tics)
 	local nextway = Path_CheckPositionInWaypoints(way, container[path].timeline)
