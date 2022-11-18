@@ -286,6 +286,65 @@ libWay.lerpObjToPoint = function(self, a, target, t)
 	a.roll = roll
 end
 
+-- varation for player position adjuements
+libWay.lerpPlayToPoint = function(self, a, target, t)	
+	local x, y, z, angle, pitch, roll = self.lerpToPoint(a, target, t)
+
+	a.angle = angle
+	a.pitch = pitch
+	a.roll = roll
+end
+
+local function Path_CheckPositionInWaypoints(current, list)
+	local nextway, prevway = 0, 0
+
+	local nextone = false
+	for k, v in ipairs(list) do
+		if nextone then 
+			nextway = v
+			break
+		end
+		
+		if v == current and not nextone then 
+			nextone = true 
+		else	
+			prevway = v
+		end
+	end
+
+	if not nextway then
+		nextway = list[1]
+	end
+
+	if not prevway then
+		prevway = list[#list]
+	end
+
+	return nextway, prevway
+end
+
+local function Path_IfNextPoint(data, progress)
+	if progress == FRACUNIT then
+		data.pos = data.nextway
+		data.progress = Waypoints[data.id][data.nextway].starttics+1
+	end
+	if progress == 0 then
+		data.progress = Waypoints[data.id][data.prevway].starttics+(Waypoints[data.id][data.pos].spawnpoint.args[3]*TICRATE)-1
+		data.pos = data.prevway
+	end	
+end
+
+
+libWay.calAvgSpeed = function(container, path, way, tics)
+	local nextway = Path_CheckPositionInWaypoints(way, container[path].timeline)
+	local distance = P_AproxDistance(P_AproxDistance(
+		container[path][way].x - container[path][nextway].x, 
+		container[path][way].y - container[path][nextway].y),
+		container[path][way].z - container[path][nextway].z
+	)
+	return (distance / (container[path][way].spawnpoint.args[3]*TICRATE) or 0)
+end
+
 local function WaypointSetup(a, mt)
 	if not (Waypoints[mt.args[0]]) then
 		Waypoints[mt.args[0]] = {}
@@ -328,44 +387,6 @@ end
 //	mobj.spawnpoint.tag 	-- Used for tagging object to path and activation
 //
 
-local function Path_CheckPositionInWaypoints(current, list)
-	local nextway, prevway = 0, 0
-
-	local nextone = false
-	for k, v in ipairs(list) do
-		if nextone then 
-			nextway = v
-			break
-		end
-		
-		if v == current and not nextone then 
-			nextone = true 
-		else	
-			prevway = v
-		end
-	end
-
-	if not nextway then
-		nextway = list[1]
-	end
-
-	if not prevway then
-		prevway = list[#list]
-	end
-
-	return nextway, prevway
-end
-
-local function Path_IfNextPoint(data, progress)
-	if progress == FRACUNIT then
-		data.pos = data.nextway
-		data.progress = Waypoints[data.id][data.nextway].starttics+1
-	end
-	if progress == 0 then
-		data.progress = Waypoints[data.id][data.prevway].starttics+(Waypoints[data.id][data.pos].spawnpoint.args[3]*TICRATE)-1
-		data.pos = data.prevway
-	end	
-end
 
 //
 //	Flag constants for controller
