@@ -222,6 +222,70 @@ local SwitchEasing = {
 	[10] = function(t, s, e) return TBSlib.quadBezier(t, s, s-isminusorplus(s)*abs(e-s)/3, e) end;	
 }
 
+libWay.slotPathway = function(container, path)
+	if not (container[path]) then
+		container[path] = {}
+		container[path].timeline = {}
+	end
+end
+
+libWay.addWaypoint = function(path, way, a_x, a_y, a_z, a_angle, a_roll, a_pitch, a_options, a_stringoptions)	
+	if not container[path][way] then
+		table.insert(container[path].timeline, way)
+		table.sort(container[path].timeline, function(a, b) return a < b end)
+	
+		container[path][way] = {starttics = 0; x = fx; y = fy; z = fz; 
+		angle = a_angle; roll = a_roll; pitch = a_pitch;
+		spawnpoint = {args = a_options; stringargs = a_stringoptions}}
+		
+		container[path].tics = 0
+		for k,v in ipairs(container[path]) do
+			if k <= way then
+				container[path][way].starttics = $+container[path][way].spawnpoint.args[3]
+			end
+			container[path].tics = $+container[path][way].spawnpoint.args[3]
+		end
+	end
+end
+
+libWay.delWaypoint = function(container, path, way)	
+	if container[path][way] then
+		container[path][way] = nil
+
+		for k,v in ipairs(container[path]) do
+			if k <= way then
+				container[path][way].starttics = $+container[path][way].spawnpoint.args[3]
+			end
+			container[path].tics = $+container[path][way].spawnpoint.args[3]
+		end		
+	end
+end
+
+libWay.lerpToPoint = function(a, target, t)	
+	local x, y, z, angle, roll, pitch
+	local fixedangle_a, fixedangle_target = AngleFixed(a.angle), AngleFixed(target.angle)
+	local fixedpitch_a, fixedpitch_target = AngleFixed(a.pitch), AngleFixed(target.pitch)
+	local fixedroll_a, fixedroll_target = AngleFixed(a.roll), AngleFixed(target.roll)
+
+	x = FixedMul(a.x + (target.x - a.x), t)
+	y = FixedMul(a.y + (target.y - a.y), t)
+	z = FixedMul(a.z + (target.z - a.z), t)
+	angle = FixedAngle(FixedMul(fixedangle_a + (fixedangle_target - fixedangle_a), t))
+	pitch = FixedAngle(FixedMul(fixedpitch_a + (fixedpitch_target - fixedpitch_a), t))
+	roll = FixedAngle(FixedMul(fixedroll_a + (fixedroll_target - fixedroll_a), t))
+
+	return x, y, z, angle, pitch, roll
+end
+
+libWay.lerpObjToPoint = function(self, a, target, t)	
+	local x, y, z, angle, pitch, roll = self.lerpToPoint(a, target, t)
+
+	P_TeleportMove(a, x, y, z)
+	a.angle = angle
+	a.pitch = pitch
+	a.roll = roll
+end
+
 local function WaypointSetup(a, mt)
 	if not (Waypoints[mt.args[0]]) then
 		Waypoints[mt.args[0]] = {}
@@ -232,7 +296,8 @@ local function WaypointSetup(a, mt)
 		table.insert(Waypoints[mt.args[0]].timeline, mt.args[1])
 		table.sort(Waypoints[mt.args[0]].timeline, function(a, b) return a < b end)
 	
-		Waypoints[mt.args[0]][mt.args[1]] = {starttics = 0; x = mt.x*FRACUNIT; y = mt.y*FRACUNIT; z = a.z; angle = mt.angle*ANG1; 
+		Waypoints[mt.args[0]][mt.args[1]] = {starttics = 0; x = mt.x*FRACUNIT; y = mt.y*FRACUNIT; z = a.z; 
+		angle = mt.angle*ANG1; roll = mt.roll*ANG1; pitch = mt.pitch*ANG1;
 		spawnpoint = {args = mt.args; stringargs = mt.stringargs}}
 		
 		Waypoints[mt.args[0]].tics = 0
