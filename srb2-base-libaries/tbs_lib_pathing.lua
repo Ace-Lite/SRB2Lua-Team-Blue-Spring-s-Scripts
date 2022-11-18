@@ -151,7 +151,7 @@ local StringtoFunctionA = {
 	
 	
 	
-	end;	
+	end;
 }
 
 //
@@ -369,43 +369,38 @@ end
 
 libWay.closestPathToTarget = function(pathway, target)
 	local distancefirst = INT32_MAX
-	local point_idfirst = 0
-	local distancesecond = INT32_MAX
-	local point_idsecond = 0
+	local point_idfirst = 0	
 	
 	local dropDist = {}
 
 	for k,p in ipairs(pathway) do
-		local disttarget = P_AproxDistance(target.z - p.z, P_AproxDistance(target.x - p.x, target.y - p.y))
-		dropDist:insert(disttarget, k)
-		if distancefirst > disttarget then
-			distancefirst = disttarget
+		dropDist[k] = P_AproxDistance(P_AproxDistance(target.x - p.x, target.y - p.y), target.z - p.z)
+		if distancefirst > dropDist[k] then			
+			distancefirst = dropDist[k]
 			point_idfirst = k
 		end
 	end
 
-	for k,p in ipair(dropDist) do
-		if distancefirst < distancesecond and distancesecond > p then
-			distancesecond = p
-			point_idsecond = k
-		end
-	end
+	local angle_h = R_PointToDist2(pathway[point_idfirst].x, pathway[point_idfirst].y, target.x, target.y)
+	local angle_v = R_PointToDist2(pathway[point_idfirst].y, pathway[point_idfirst].z, target.y, target.z)
 
-	return distancefirst, point_idfirst, distancesecond, point_idsecond
+	return {distancefirst, point_idfirst, angle_h, angle_v}
 end
 
 -- less accurate approximation
-libWay.approxDistToTarget = function(self, pathway, target)
-	local distf, idf, dists, ids = self:closestPointToTarget(pathway, target)
+-- libWay:approxDistToTarget(pathway, target)
+libWay.approxDistToTarget = function(pathway, target)
+	local table = libWay.closestPathToTarget(pathway, target)
+	if not table[2] then return 0 end
 	
-	local pointdist = P_AproxDistance(pathway[idf].z - pathway[ids].z, 
-	P_AproxDistance(pathway[idf].x - pathway[ids].x, pathway[idf].y - pathway[ids].y))
+	local nexttopath, prev = Path_CheckPositionInWaypoints(table[2], pathway.timeline)
+	local pointdist = R_PointToDist2(pathway[table[2]].x, pathway[table[2]].y, pathway[nexttopath].x, pathway[nexttopath].y)
 
-	local duration = pathway[idf].waypointinfo.args[3]*TICRATE*FRACUNIT
-	local starttime = pathway[idf].starttics
+	local duration = pathway[table[2]].spawnpoint.args[3]*TICRATE*FRACUNIT
+	local starttime = pathway[table[2]].starttics
 	
-	local pyth = FixedSqrt(-(FixedMul(distf, distf)-FixedMul(dists, dists)))
-
+	local pyth = FixedMul(table[1], FixedMul(cos(table[3]), sin(table[4]))) 
+	
 	return starttime+FixedMul(FixedDiv(pyth, pointdist), duration)/FRACUNIT
 end
 
@@ -475,6 +470,9 @@ local CC_IFZEROACTIV = 16	-- 	If on pos 0, it will require outside activation
 local CC_REVERSEMOVE = 32	-- 	Reverse Movement
 local CC_GRAVITYFORC = 64	-- 	Only manipulate X|Y
 local CC_DONTTELEPOR = 128	-- 	Doesn't teleport object to start
+local CC_APPRXTARGET = 256  --	Appoximates Object target
+local CC_DONTROTATEO = 512  --	Doesn't rotate Angle
+local CC_MOONWALKFOR = 1024 --  Moon walk lol
 
 local function ControllerThinker(mobj)
 	if not (mobj.spawnpoint or TaggedObj[mobj.spawnpoint.tag]) then return end
@@ -492,6 +490,7 @@ local function ControllerThinker(mobj)
 				id = mobj.spawnpoint.args[0];
 				pos = mobj.spawnpoint.args[1];
 				progress = WPdummy[mobj.spawnpoint.args[1]].starttics;
+				flip = false;
 			}
 			a.tbswaypoint.nextway, a.tbswaypoint.prevway = Path_CheckPositionInWaypoints(a.tbswaypoint.pos, Waypoints[a.tbswaypoint.id].timeline)
 		end
@@ -500,14 +499,30 @@ local function ControllerThinker(mobj)
 		//	PROGRESSION
 		//
 		
-		if not (mobj.spawnpoint.args[3] & CC_REVERSEMOVE) then
-			a.tbswaypoint.progress = $+1
+		local flipObj = false
+		
+		if (mobj.spawnpoint.args[3] & CC_APPRXTARGET) and a.target then
+			local targetprogress = libWay.approxDistToTarget(Waypoints[a.tbswaypoint.id], a.target)
+			if targetprogress > a.tbswaypoint.progress then
+				a.tbswaypoint.flip = false
+				a.tbswaypoint.progress = $+1
+			elseif targetprogress < a.tbswaypoint.progress then
+				a.tbswaypoint.flip = true				
+				a.tbswaypoint.progress = $-1
+			end
 		else
-			a.tbswaypoint.progress = $-1
+			if not (mobj.spawnpoint.args[3] & CC_REVERSEMOVE) then
+				a.tbswaypoint.flip = false				
+				a.tbswaypoint.progress = $+1
+			else
+				a.tbswaypoint.flip = true
+				a.tbswaypoint.progress = $-1
+			end
 		end
 
 		local waypointobj = Waypoints[a.tbswaypoint.id][a.tbswaypoint.pos]
-		local waypointinfo = Waypoints[a.tbswaypoint.id][a.tbswaypoint.pos].spawnpoint
+		local waypointinfo = Waypoints[a.tbswaypoint.id][a.tbswaypoint.pos].spawnpoint		
+		
 		local progress = ((a.tbswaypoint.progress-waypointobj.starttics)*FRACUNIT)/(waypointinfo.args[3]*TICRATE)		
 		
 		if progress == 0 or progress == FRACUNIT then
@@ -528,9 +543,11 @@ local function ControllerThinker(mobj)
 		local x = SwitchEasing[waypointinfo.args[2]](progress, waypointobj.x/FRACUNIT, nextwaypoint.x/FRACUNIT)
 		local y = SwitchEasing[waypointinfo.args[2]](progress, waypointobj.y/FRACUNIT, nextwaypoint.y/FRACUNIT)
 		local z = SwitchEasing[waypointinfo.args[2]](progress, waypointobj.z/FRACUNIT, nextwaypoint.z/FRACUNIT)
-
-	
-		a.angle = SwitchEasing[waypointinfo.args[2]](progress, waypointobj.angle, nextwaypoint.angle)
+		if not (mobj.spawnpoint.args[3] & CC_DONTROTATEO) then
+			local angleg = SwitchEasing[waypointinfo.args[2]](progress, waypointobj.angle, nextwaypoint.angle)
+			a.angle = a.tbswaypoint.flip and InvAngle(angleg) or angleg
+		end
+		
 		P_TeleportMove(a, x*FRACUNIT, y*FRACUNIT, z*FRACUNIT)
 
 		//	Action
