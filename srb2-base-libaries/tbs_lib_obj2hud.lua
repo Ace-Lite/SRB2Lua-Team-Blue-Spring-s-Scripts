@@ -1,13 +1,12 @@
 local registered_objects = {}
 
-local libOBJHUDEXT = {
+local TBSHudObjExt = {
 	stringversion = '0.1',
 	iteration = 1,
 }
 
-TBSHudObjExt.addObjToList = function(obj, values)
+TBSHudObjExt.addObjToList = function(obj, list)
     local settings = {
-        values = values;
         x = obj.x,
         y = obj.y,
         z = obj.z,
@@ -15,32 +14,39 @@ TBSHudObjExt.addObjToList = function(obj, values)
         height = obj.height,        
     }
 
-    registered_objects:insert(settings)
+	settings.values = list
+    table.insert(registered_objects, settings)
 end
 
 
+
 hud.add(function(v, stplyr, cam)
-    for k,v in ipairs(registered_objects) do
-        local angle = R_PointToAngle(v.x, v.y)
+    for k,obj in ipairs(registered_objects) do
+		local angle = R_PointToAngle(obj.x, obj.y)
         if not (cam.angle-ANGLE_90 < angle and cam.angle+ANGLE_90 > angle) then continue end
 
-        local dist = R_PointToDist(v.x, v.y)/90
-        local x, y = 160+(cam.x-v.x)/dist, 100+(cam.z-v.z)/dist
-        local height, radius = v.height/dist, v.radius/dist
 
-        v.drawfill(x, y, radius, 1, 10)
-        v.drawfill(x, y+height, radius, 1, 10)
-        v.drawfill(x-radius, y+height, 1, height, 10)
-        v.drawfill(x+radius, y+height, 1, height, 10)
+		local realangle = 320*sin(cam.angle - angle)/FRACUNIT
+		local dx = (obj.x-cam.x)
+		
+		local z = 4*FixedMul((obj.y-cam.y), tan(angle/2))
+		local x = 160+dx/z+realangle
+		local y = 100-(obj.z-cam.z)/z+200*sin(cam.aiming)/FRACUNIT
+        local height, radius = obj.height/z, obj.radius/z
 
-        if v.values then
-            for k,val in ipairs(v.values) do
-                v.drawString(x, y, k+": "+val)
-                y = $+5
+        v.drawFill(x-radius, y, radius*2, 1, 10)
+        v.drawFill(x-radius, y-height, radius*2, 1, 10)
+        v.drawFill(x-radius, y-height, 1, height, 10)
+        v.drawFill(x+radius, y-height, 1, height, 10)
+
+        if obj.values then
+            for k,val in ipairs(obj.values) do
+                v.drawString(x, y, val)
+                y = $+8
             end
         end
     end
     registered_objects = {}
 end, "game")
 
-rawset(_G, "TBSHudObjExt", libOBJHUDEXT)
+rawset(_G, "TBSHudObjExt", TBSHudObjExt)

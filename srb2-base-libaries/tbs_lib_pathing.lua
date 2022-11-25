@@ -27,7 +27,6 @@ local debug = CV_RegisterVar({
 //	Todo:
 //	-- Path-Target Approximation polish
 //	-- Entrance point approximation (You don't want smooth camera entrance transition???????? wtf)
-//  -- Debug Options for me :P
 //
 
 //
@@ -312,9 +311,9 @@ addHook("LinedefExecute", libWay.activateCameraExecute, "TBS_CWAY")
 
 libWay.activate = function(source, target, path, point)
 	target.tbswaypoint = {
-		id = way;
+		id = path;
 		pos = point;
-		progress = Waypoints[way][point].starttics;		
+		progress = Waypoints[path][point].starttics;		
 		flip = false;
 		-- original flags so, I could simply turn them on
 		flags = target.flags;
@@ -591,7 +590,7 @@ local function ControllerThinker(mobj)
 		local nextwaypoint = Waypoints[a.tbswaypoint.id][a.tbswaypoint.nextway]
 
 		progress = ((a.tbswaypoint.progress-waypointobj.starttics)*FRACUNIT)/(waypointinfo.args[3]*TICRATE)	
-		libWay.pathingFixedMove(a, controller, progress, waypointinfo, waypointobj, nextwaypoint)
+		libWay.pathingFixedMove(a, mobj, progress, waypointinfo, waypointobj, nextwaypoint)
 
 		//	Action
 		if waypointinfo.args[7] > 0 and waypointinfo.args[7] <= #NumToStringAction then
@@ -610,8 +609,9 @@ local function ControllerThinker(mobj)
 		//	DEBUG MODE
 		//
 	
-		if TBSHudObjExt and debug == 2 then
-			TBSHudObjExt.addObjToList(a, a.tbswaypoint)
+		if TBSHudObjExt and debug.value == 2 then
+			local table = {"id: "+a.tbswaypoint.id, "pos: "+a.tbswaypoint.pos, "%: "+a.tbswaypoint.progress+"/"+Waypoints[a.tbswaypoint.id].tics}
+			TBSHudObjExt.addObjToList(a, table)
 		end		
 		
 		//
