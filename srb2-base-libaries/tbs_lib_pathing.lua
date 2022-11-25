@@ -25,19 +25,14 @@ local debug = CV_RegisterVar({
 
 //
 //	Todo:
-//	-- Special Map triggers (Would be funny if it was used for cutscenes... haha totally unrealistic... right?)
-//	-- Split controller code segments for reuse. For code size optimalization + Camera work
-//	-- Optimalize code somehow... for example reduce amount of calculations done in teleporting
-//	-- Fix Hitbox update
-//	-- Figure out path-target approximation (2D kind and 3D kind and special camera kind)
+//	-- Path-Target Approximation polish
 //	-- Flag - approximate momentum after pathing ends (rockets etc.)
 //	-- Entrance point approximation (Camera will need it for etrance state)
-//	-- Looping types
 //
 
 //
 //	PKZ Todo:
-//	-- Waterpool for PKZ2 (let player have some movement)
+//	-- Waterpool for PKZ2 -> Special Controller
 //		-- Allow "2D" movement while in the state
 //		-- They going to use specialized controllers
 //		-- Repeatable
@@ -45,7 +40,7 @@ local debug = CV_RegisterVar({
 //	-- Cutscenes
 //		-- PKZ2-PKZ3 transition
 //		-- Credits
-//  -- Dino Skeleton Trains (PKZ 1-4)
+//  -- Dino Skeleton Trains (PKZ 1-4) -> Re-use
 //		-- Hangable from buttom ( :earless: shortcut for AIZ's hanging shit )
 //		-- Control pathing of segments by simply teleporting them with "delayed" coordinates
 //		-- Oh activated on use
@@ -54,10 +49,29 @@ local debug = CV_RegisterVar({
 
 local Waypoints = {}
 local TaggedObj = {}
+local AvailableControllers = {}
+local TBS_CamWayVars = {
+	active = false;
+	id = 0;
+	pos = 0;
+	progress = 0;
+	nextway = 0;
+	prevway = 0;
+}
+
 
 addHook("MapChange", function()
 	Waypoints = {}
 	TaggedObj = {}
+	AvailableControllers = {}
+	TBS_CamWayVars = {
+		active = false;
+		id = 0;
+		pos = 0;
+		progress = 0;
+		nextway = 0;
+		prevway = 0;
+	}	
 end)
 
 -- MT_GENERALWAYPOINT
@@ -66,6 +80,8 @@ end)
 // mapthing.args[2] = Easing
 // mapthing.args[3] = Duration(1 = TICRATE)
 // mapthing.args[4] = Enum{Waypoint(0), Starting point(1), Ending point(2)}
+
+// mapthing.args[5] = ActionTags -- for objects, if they have special actions
 
 // mapthing.args[6] = Flags WC_*
 
@@ -221,6 +237,111 @@ local SwitchEasing = {
 	[10] = function(t, s, e) return TBSlib.quadBezier(t, s, s-isminusorplus(s)*abs(e-s)/3, e) end;	
 }
 
+local function Math_CheckPositive(num)
+	if num > 0 then
+		return true
+	elseif num == 0 then
+		return nil
+	else
+		return false
+	end
+end
+
+
+local function Path_CheckPositionInWaypoints(current, list)
+	local nextway, prevway = 0, 0
+
+	local nextone = false
+	for k, v in ipairs(list) do
+		if nextone then 
+			nextway = v
+			break
+		end
+		
+		if v == current and not nextone then 
+			nextone = true 
+		else	
+			prevway = v
+		end
+	end
+
+	if not nextway then
+		nextway = list[1]
+	end
+
+	if not prevway then
+		prevway = list[#list]
+	end
+
+	return nextway, prevway
+end
+
+local function Path_IfNextPoint(data, progress)
+	if progress == FRACUNIT then
+		data.pos = data.nextway
+		data.progress = Waypoints[data.id][data.nextway].starttics+1
+	end
+	if progress == 0 then
+		data.progress = Waypoints[data.id][data.prevway].starttics+(Waypoints[data.id][data.pos].spawnpoint.args[3]*TICRATE)-1
+		data.pos = data.prevway
+	end	
+end
+
+libWay.activateMapExecute = function(line,mobj,sector)
+	if not (mobj.player or AvailableControllers[line.args[1]]) then return end
+	local controller = AvailableControllers[line.args[1]]
+
+	mobj.tbswaypoint = {
+		id = controller.spawnpoint.args[0];
+		pos = controller.spawnpoint.args[1];
+		progress = Waypoints[controller.spawnpoint.args[0]][controller.spawnpoint.args[1]].starttics;
+		flip = false;
+		-- original flags so, I could simply turn them on
+		flags = target.flags;
+		flags2 = target.flags2;
+	}
+	
+	target.flags = $|MF_NOGRAVITY
+	target.tbswaypoint.nextway, target.tbswaypoint.prevway = Path_CheckPositionInWaypoints(target.tbswaypoint.pos, Waypoints[target.tbswaypoint.id].timeline)	
+end
+
+addHook("LinedefExecute", libWay.activateMapExecute, "TBS_WAY")
+
+libWay.activateCameraExecute = function(line,mobj,sector)
+	if not AvailableControllers.camera[line.args[1]] then return end
+	local controller = AvailableControllers[line.args[1]]
+
+	TBS_CamWayVars.id = controller.spawnpoint.args[0];
+	TBS_CamWayVars.pos = controller.spawnpoint.args[1];
+	TBS_CamWayVars.progress = Waypoints[controller.spawnpoint.args[0]][controller.spawnpoint.args[1]].starttics;
+
+	TBS_CamWayVars.nextway, TBS_CamWayVars.prevway = Path_CheckPositionInWaypoints(TBS_CamWayVars.pos, Waypoints[TBS_CamWayVars.id].timeline)
+	TBS_CamWayVars.active = true;	
+end
+
+addHook("LinedefExecute", libWay.activateCameraExecute, "TBS_CWAY")
+
+libWay.activate = function(source, target, path, point)
+	target.tbswaypoint = {
+		id = way;
+		pos = point;
+		progress = Waypoints[way][point].starttics;		
+		flip = false;
+		-- original flags so, I could simply turn them on
+		flags = target.flags;
+		flags2 = target.flags2;		
+	}
+
+	target.flags = $|MF_NOGRAVITY
+	target.tbswaypoint.nextway, target.tbswaypoint.prevway = Path_CheckPositionInWaypoints(target.tbswaypoint.pos, Waypoints[target.tbswaypoint.id].timeline)
+end
+
+libWay.deactive = function(target)
+	target.flags = target.tbswaypoint.flags
+	target.flags2 = target.tbswaypoint.flags2
+	target.tbswaypoint = nil
+end
+
 libWay.slotPathway = function(container, path)
 	if not (container[path]) then
 		container[path] = {}
@@ -258,6 +379,18 @@ libWay.delWaypoint = function(container, path, way)
 			container[path].tics = $+container[path][way].spawnpoint.args[3]
 		end		
 	end
+end
+
+libWay.pathingFixedMove = function(a, controller, progress, waypointinfo, waypointobj, nextwaypoint)
+	local x = SwitchEasing[waypointinfo.args[2]](progress, waypointobj.x/FRACUNIT, nextwaypoint.x/FRACUNIT)
+	local y = SwitchEasing[waypointinfo.args[2]](progress, waypointobj.y/FRACUNIT, nextwaypoint.y/FRACUNIT)
+	local z = SwitchEasing[waypointinfo.args[2]](progress, waypointobj.z/FRACUNIT, nextwaypoint.z/FRACUNIT)
+	if not (controller.spawnpoint.args[3] & CC_DONTROTATEO) then
+		local angleg = SwitchEasing[waypointinfo.args[2]](progress, waypointobj.angle, nextwaypoint.angle)
+		a.angle = a.tbswaypoint.flip and InvAngle(angleg) or angleg
+	end
+	
+	P_TeleportMove(a, x*FRACUNIT, y*FRACUNIT, z*FRACUNIT)
 end
 
 libWay.lerpToPoint = function(a, target, t)	
@@ -314,59 +447,6 @@ libWay.directPosPerMomentum = function(self, a, path_angle)
 	end
 end
 
-
-
-
-local function Math_CheckPositive(num)
-	if num > 0 then
-		return true
-	elseif num == 0 then
-		return nil
-	else
-		return false
-	end
-end
-
-
-local function Path_CheckPositionInWaypoints(current, list)
-	local nextway, prevway = 0, 0
-
-	local nextone = false
-	for k, v in ipairs(list) do
-		if nextone then 
-			nextway = v
-			break
-		end
-		
-		if v == current and not nextone then 
-			nextone = true 
-		else	
-			prevway = v
-		end
-	end
-
-	if not nextway then
-		nextway = list[1]
-	end
-
-	if not prevway then
-		prevway = list[#list]
-	end
-
-	return nextway, prevway
-end
-
-local function Path_IfNextPoint(data, progress)
-	if progress == FRACUNIT then
-		data.pos = data.nextway
-		data.progress = Waypoints[data.id][data.nextway].starttics+1
-	end
-	if progress == 0 then
-		data.progress = Waypoints[data.id][data.prevway].starttics+(Waypoints[data.id][data.pos].spawnpoint.args[3]*TICRATE)-1
-		data.pos = data.prevway
-	end	
-end
-
 libWay.closestPathToTarget = function(pathway, target)
 	local distancefirst = INT32_MAX
 	local point_idfirst = 0	
@@ -388,7 +468,7 @@ libWay.closestPathToTarget = function(pathway, target)
 end
 
 -- less accurate approximation
--- libWay:approxDistToTarget(pathway, target)
+-- libWay.approxDistToTarget(pathway, target)
 libWay.approxDistToTarget = function(pathway, target)
 	local table = libWay.closestPathToTarget(pathway, target)
 	if not table[2] then return 0 end
@@ -477,22 +557,13 @@ local CC_MOONWALKFOR = 1024 --  Moon walk lol
 local function ControllerThinker(mobj)
 	if not (mobj.spawnpoint or TaggedObj[mobj.spawnpoint.tag]) then return end
 	for _,a in ipairs(TaggedObj[mobj.spawnpoint.tag]) do
-		
-
-		
+				
 		//
 		//	GENERAL
 		//
 		
 		if not (a.tbswaypoint) then
-			local WPdummy = Waypoints[mobj.spawnpoint.args[0]]
-			a.tbswaypoint = {
-				id = mobj.spawnpoint.args[0];
-				pos = mobj.spawnpoint.args[1];
-				progress = WPdummy[mobj.spawnpoint.args[1]].starttics;
-				flip = false;
-			}
-			a.tbswaypoint.nextway, a.tbswaypoint.prevway = Path_CheckPositionInWaypoints(a.tbswaypoint.pos, Waypoints[a.tbswaypoint.id].timeline)
+			libWay.activate(mobj, a, mobj.spawnpoint.args[0], mobj.spawnpoint.args[1])
 		end
 			
 		//
@@ -537,18 +608,10 @@ local function ControllerThinker(mobj)
 
 		waypointobj = Waypoints[a.tbswaypoint.id][a.tbswaypoint.pos]	
 		waypointinfo = Waypoints[a.tbswaypoint.id][a.tbswaypoint.pos].spawnpoint
-		progress = ((a.tbswaypoint.progress-waypointobj.starttics)*FRACUNIT)/(waypointinfo.args[3]*TICRATE)	
-	
 		local nextwaypoint = Waypoints[a.tbswaypoint.id][a.tbswaypoint.nextway]
-		local x = SwitchEasing[waypointinfo.args[2]](progress, waypointobj.x/FRACUNIT, nextwaypoint.x/FRACUNIT)
-		local y = SwitchEasing[waypointinfo.args[2]](progress, waypointobj.y/FRACUNIT, nextwaypoint.y/FRACUNIT)
-		local z = SwitchEasing[waypointinfo.args[2]](progress, waypointobj.z/FRACUNIT, nextwaypoint.z/FRACUNIT)
-		if not (mobj.spawnpoint.args[3] & CC_DONTROTATEO) then
-			local angleg = SwitchEasing[waypointinfo.args[2]](progress, waypointobj.angle, nextwaypoint.angle)
-			a.angle = a.tbswaypoint.flip and InvAngle(angleg) or angleg
-		end
-		
-		P_TeleportMove(a, x*FRACUNIT, y*FRACUNIT, z*FRACUNIT)
+
+		progress = ((a.tbswaypoint.progress-waypointobj.starttics)*FRACUNIT)/(waypointinfo.args[3]*TICRATE)	
+		libWay.pathingFixedMove(a, controller, progress, waypointinfo, waypointobj, nextwaypoint)
 
 		//	Action
 		if waypointinfo.args[7] > 0 and waypointinfo.args[7] <= #NumToStringAction then
@@ -576,14 +639,6 @@ local function ControllerThinker(mobj)
 	end
 end
 
-local cameratbswp = {
-	active = false;
-	id = 0;
-	pos = 0;
-	progress = 0;
-	nextway = 0;
-	prevway = 0;
-}
 
 
 local function CameraControllerThinker(mobj)
@@ -591,15 +646,15 @@ local function CameraControllerThinker(mobj)
 	//	GENERAL
 	//
 		
-	if not (cameratbswp.active) then
+	if not (TBS_CamWayVars.active) then
 		local WPdummy = Waypoints[mobj.spawnpoint.args[0]]
-		cameratbswp = {
+		TBS_CamWayVars = {
 			active = true;
 			id = mobj.spawnpoint.args[0];
 			pos = mobj.spawnpoint.args[1];
 			progress = WPdummy[mobj.spawnpoint.args[1]].starttics;
 		}
-		cameratbswp.nextway, cameratbswp.prevway = Path_CheckPositionInWaypoints(cameratbswp.pos, Waypoints[cameratbswp.id].timeline)
+		TBS_CamWayVars.nextway, TBS_CamWayVars.prevway = Path_CheckPositionInWaypoints(TBS_CamWayVars.pos, Waypoints[TBS_CamWayVars.id].timeline)
 	end
 			
 	//
@@ -607,18 +662,18 @@ local function CameraControllerThinker(mobj)
 	//
 		
 	if not (mobj.spawnpoint.args[3] & CC_REVERSEMOVE) then
-		cameratbswp.progress = $+1
+		TBS_CamWayVars.progress = $+1
 	else
-		cameratbswp.progress = $-1
+		TBS_CamWayVars.progress = $-1
 	end
 
-	local waypointobj = Waypoints[cameratbswp.id][cameratbswp.pos]
-	local waypointinfo = Waypoints[cameratbswp.id][cameratbswp.pos].spawnpoint
-	local progress = ((cameratbswp.progress-waypointobj.starttics)*FRACUNIT)/(waypointinfo.args[3]*TICRATE)		
+	local waypointobj = Waypoints[TBS_CamWayVars.id][TBS_CamWayVars.pos]
+	local waypointinfo = Waypoints[TBS_CamWayVars.id][TBS_CamWayVars.pos].spawnpoint
+	local progress = ((TBS_CamWayVars.progress-waypointobj.starttics)*FRACUNIT)/(waypointinfo.args[3]*TICRATE)		
 		
 	if progress == 0 or progress == FRACUNIT then
-		Path_IfNextPoint(cameratbswp, progress)
-		cameratbswp.nextway, cameratbswp.prevway = Path_CheckPositionInWaypoints(cameratbswp.pos, Waypoints[cameratbswp.id].timeline)			
+		Path_IfNextPoint(TBS_CamWayVars, progress)
+		TBS_CamWayVars.nextway, TBS_CamWayVars.prevway = Path_CheckPositionInWaypoints(TBS_CamWayVars.pos, Waypoints[TBS_CamWayVars.id].timeline)			
 	end
 
 	
@@ -626,11 +681,11 @@ local function CameraControllerThinker(mobj)
 	//	POSITION
 	//		
 
-	waypointobj = Waypoints[cameratbswp.id][cameratbswp.pos]	
-	waypointinfo = Waypoints[cameratbswp.id][cameratbswp.pos].spawnpoint
-	progress = ((cameratbswp.progress-waypointobj.starttics)*FRACUNIT)/(waypointinfo.args[3]*TICRATE)	
+	waypointobj = Waypoints[TBS_CamWayVars.id][TBS_CamWayVars.pos]	
+	waypointinfo = Waypoints[TBS_CamWayVars.id][TBS_CamWayVars.pos].spawnpoint
+	progress = ((TBS_CamWayVars.progress-waypointobj.starttics)*FRACUNIT)/(waypointinfo.args[3]*TICRATE)	
 	
-	local nextwaypoint = Waypoints[cameratbswp.id][cameratbswp.nextway]
+	local nextwaypoint = Waypoints[TBS_CamWayVars.id][TBS_CamWayVars.nextway]
 	local x = SwitchEasing[waypointinfo.args[2]](progress, waypointobj.x/FRACUNIT, nextwaypoint.x/FRACUNIT)
 	local y = SwitchEasing[waypointinfo.args[2]](progress, waypointobj.y/FRACUNIT, nextwaypoint.y/FRACUNIT)
 	local z = SwitchEasing[waypointinfo.args[2]](progress, waypointobj.z/FRACUNIT, nextwaypoint.z/FRACUNIT)
@@ -650,7 +705,7 @@ local function CameraControllerThinker(mobj)
 	//
 		
 	if nextwaypoint.spawnpoint.args[6] & WC_DOWNMOBJ and progress == (FRACUNIT-1) then
-		cameratbswp.active = false
+		TBS_CamWayVars.active = false
 		P_RemoveMobj(mobj)
 	end
 
