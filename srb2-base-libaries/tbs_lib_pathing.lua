@@ -606,6 +606,13 @@ local function ControllerThinker(mobj)
 			a.state = waypointinfo.stringargs[0]
 		end
 		
+		//
+		//	DEBUG MODE
+		//
+	
+		if TBSHudObjExt and debug == 2 then
+			TBSHudObjExt.addObjToList(a, a.tbswaypoint)
+		end		
 		
 		//
 		//	SPECIAL CASES
@@ -615,7 +622,6 @@ local function ControllerThinker(mobj)
 			libWay.deactive(a, mobj, Waypoints)
 			table.remove(TaggedObj, mobj.spawnpoint.tag)
 		end
-		
 	end
 end
 
@@ -687,7 +693,6 @@ local function CameraControllerThinker(mobj)
 	if nextwaypoint.spawnpoint.args[6] & WC_DOWNMOBJ and progress == (FRACUNIT-1) then
 		TBS_CamWayVars.active = false
 	end
-
 end
 
 
