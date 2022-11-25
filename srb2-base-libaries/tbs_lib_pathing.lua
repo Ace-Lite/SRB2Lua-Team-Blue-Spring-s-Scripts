@@ -26,8 +26,8 @@ local debug = CV_RegisterVar({
 //
 //	Todo:
 //	-- Path-Target Approximation polish
-//	-- Flag - approximate momentum after pathing ends (rockets etc.)
-//	-- Entrance point approximation (Camera will need it for etrance state)
+//	-- Entrance point approximation (You don't want smooth camera entrance transition???????? wtf)
+//  -- Debug Options for me :P
 //
 
 //
@@ -153,6 +153,23 @@ local WC_SHOWHUD = 8		-- Shows player's hud
 local WC_PUSHHUD = 16		-- Pushes away player's hud
 local WC_BRINGHUD = 32		-- Brings in player's hud
 local WC_STOPFORDIALOG = 64	-- Dialog stop
+
+//
+//	Flag constants for controller
+//
+
+local CC_MOVEMENTACT = 1	-- 	Movement on Activation
+local CC_ORIGINSMOBJ = 2	-- 	Count Mobj's Origin point as very first point
+local CC_REMOVENOGRV = 4	-- 	Remove MF_NOGRAVITY after removal from system
+local CC_RESETPOSTOZ = 8	-- 	When there is no next waypoint, teleport at 0
+local CC_IFZEROACTIV = 16	-- 	If on pos 0, it will require outside activation
+local CC_REVERSEMOVE = 32	-- 	Reverse Movement
+local CC_GRAVITYFORC = 64	-- 	Only manipulate X|Y
+local CC_DONTTELEPOR = 128	-- 	Doesn't teleport object to start
+local CC_APPRXTARGET = 256  --	Appoximates Object target
+local CC_DONTROTATEO = 512  --	Doesn't rotate Angle
+local CC_MOONWALKFOR = 1024 --  Moon walk lol
+local CC_MOMENTUMEND = 2048 --  Gives momentum after end
 
 
 freeslot("MT_GENERALWAYPOINT", "MT_PATHWAYCONTROLLER")
@@ -308,12 +325,6 @@ libWay.activate = function(source, target, path, point)
 	target.tbswaypoint.nextway, target.tbswaypoint.prevway = Path_CheckPositionInWaypoints(target.tbswaypoint.pos, Waypoints[target.tbswaypoint.id].timeline)
 end
 
-libWay.deactive = function(target)
-	target.flags = target.tbswaypoint.flags
-	target.flags2 = target.tbswaypoint.flags2
-	target.tbswaypoint = nil
-end
-
 libWay.slotPathway = function(container, path)
 	if not (container[path]) then
 		container[path] = {}
@@ -456,7 +467,7 @@ libWay.approxDistToTarget = function(pathway, target)
 	return starttime+FixedMul(FixedDiv(pyth, pointdist), duration)/FRACUNIT
 end
 
-libWay.calAvgSpeed = function(container, path, way, tics)
+libWay.calAvgSpeed = function(container, path, way)
 	local nextway = Path_CheckPositionInWaypoints(way, container[path].timeline)
 	local distance = P_AproxDistance(P_AproxDistance(
 		container[path][way].x - container[path][nextway].x, 
@@ -464,6 +475,19 @@ libWay.calAvgSpeed = function(container, path, way, tics)
 		container[path][way].z - container[path][nextway].z
 	)
 	return (distance / (container[path][way].spawnpoint.args[3]*TICRATE) or 0)
+end
+
+libWay.deactive = function(target, controller, container)
+	target.flags = target.tbswaypoint.flags
+	target.flags2 = target.tbswaypoint.flags2
+	target.tbswaypoint = nil
+
+	if controller and (controller.spawnpoint.args[3] or controller.wayflags) then
+		local flags = controller.spawnpoint.args[3] or controller.wayflags
+		if flags & CC_MOMENTUMEND then
+			libWay.calAvgSpeed(container, target.tbswaypoint.id, target.tbswaypoint.pos)
+		end
+	end
 end
 
 local function WaypointSetup(a, mt)
@@ -509,22 +533,6 @@ end
 //
 
 
-//
-//	Flag constants for controller
-//
-
-
-local CC_MOVEMENTACT = 1	-- 	Movement on Activation
-local CC_ORIGINSMOBJ = 2	-- 	Count Mobj's Origin point as very first point
-local CC_REMOVENOGRV = 4	-- 	Remove MF_NOGRAVITY after removal from system
-local CC_RESETPOSTOZ = 8	-- 	When there is no next waypoint, teleport at 0
-local CC_IFZEROACTIV = 16	-- 	If on pos 0, it will require outside activation
-local CC_REVERSEMOVE = 32	-- 	Reverse Movement
-local CC_GRAVITYFORC = 64	-- 	Only manipulate X|Y
-local CC_DONTTELEPOR = 128	-- 	Doesn't teleport object to start
-local CC_APPRXTARGET = 256  --	Appoximates Object target
-local CC_DONTROTATEO = 512  --	Doesn't rotate Angle
-local CC_MOONWALKFOR = 1024 --  Moon walk lol
 
 local function ControllerThinker(mobj)
 	if not (mobj.spawnpoint or TaggedObj[mobj.spawnpoint.tag]) then return end
@@ -604,8 +612,8 @@ local function ControllerThinker(mobj)
 		//
 		
 		if waypointinfo.args[6] & WC_DOWNMOBJ then
+			libWay.deactive(a, mobj, Waypoints)
 			table.remove(TaggedObj, mobj.spawnpoint.tag)
-			P_RemoveMobj(mobj)
 		end
 		
 	end
@@ -678,7 +686,6 @@ local function CameraControllerThinker(mobj)
 		
 	if nextwaypoint.spawnpoint.args[6] & WC_DOWNMOBJ and progress == (FRACUNIT-1) then
 		TBS_CamWayVars.active = false
-		P_RemoveMobj(mobj)
 	end
 
 end
