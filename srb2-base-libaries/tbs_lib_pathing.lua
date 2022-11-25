@@ -80,14 +80,12 @@ end)
 // mapthing.args[2] = Easing
 // mapthing.args[3] = Duration(1 = TICRATE)
 // mapthing.args[4] = Enum{Waypoint(0), Starting point(1), Ending point(2)}
-
-// mapthing.args[5] = ActionTags -- for objects, if they have special actions
-
 // mapthing.args[6] = Flags WC_*
-
 // mapthing.args[7] = Action
 // mapthing.args[8] = var1
 // mapthing.args[9] = var2
+
+// mapthing.stringargs[0] = tag -- if objects allows for it
 
 //
 //	ACTION THINKERS
@@ -96,10 +94,7 @@ end)
 local NumToStringAction = {
 	"WAY_FORCESTOP", 
 	"WAY_CHANGESCALE", 
-	"WAY_YAWCAMERA",
-	"WAY_CHANTRACK",
-	"WAY_JUMPTRACK",	
-	"WAY_CHANGROLL", 
+	"WAY_CHANGETRACK",
 	"WAY_TRIGGERTAG";
 }
 
@@ -107,66 +102,43 @@ local StringtoFunctionA = {
 	//Stop movement for specific amount of time
 	//var1 - stops the train for amount of time	
 	["WAY_FORCESTOP"] = function(a, var1, var2) 
-		if a.tbswaypoint.progress == 1 and not a.tbswaypoint.pause then
+		if not a.tbswaypoint.pause then
 			a.tbswaypoint.pause = var1
+			a.tbswaypoint.pausebool = true			
 		end
-		if a.tbswaypoint.pause > 1 then
-			a.tbswaypoint.progress = 1
-		end
-		if a.tbswaypoint.pause == 1 then
-			a.tbswaypoint.progress = 2	
+
+		if a.tbswaypoint.pause then
+			a.tbswaypoint.pause = $-1
+			a.tbswaypoint.progress = $-1
+		else
+			a.tbswaypoint.pausebool = false
 		end
 	end;
 	
 	//Change object scale
-	//var1 - amount of time to ease
+	//var1 - amount of scale per tic
 	//var2 - target scale 
 	["WAY_CHANGESCALE"] = function(a, var1, var2) 
-		--a.scale = ease.linear(t, s, var2)
-	end;
-	
-	//Change yaw of the camera (camera pathway only)
-	//var1 - amount of time to ease
-	//var2 - target yawcamera	
-	["WAY_YAWCAMERA"] = function(a, var1, var2) 
-	
-	
-	
+		if var2 > a.scale+var1 then
+			a.scale = $+var1
+		elseif var2 < a.scale-var1 then
+			a.scale = $-var1
+		end
 	end;
 	
 	//Target Different Track
 	//var1 - target track ID
 	//var2 - target pathway ID
-	["WAY_CHANTRACK"] = function(a, var1, var2) 
-	
-	
-	
-	end;
-	
-	//Jump Different Track
-	//var1 - target track ID
-	//var2 - target pathway ID
-	["WAY_JUMPTRACK"] = function(a, var1, var2) 
-	
-	
-	
-	end;
-	
-	//Changes rollangle.
-	//var1 - amount of time to ease
-	//var2 - target rollangle
-	["WAY_CHANGROLL"] = function(a, var1, var2) 
-	
-	
-	
+	["WAY_CHANGETRACK"] = function(a, var1, var2) 
+		a.tbswaypoint.id = var1
+		a.tbswaypoint.pos = var2
+		a.tbswaypoint.progress = Waypoints[var1][var2].starttics		
 	end;
 		
 	//Triggers anything using this tag
 	//var1 - tag
 	["WAY_TRIGGERTAG"] = function(a, var1, var2) 
-	
-	
-	
+		P_LinedefExecute(var1, a)
 	end;
 }
 
