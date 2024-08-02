@@ -9,8 +9,7 @@ local function exportFrames()
         image:drawSprite(sprite, n)
         filename = string.match(sprite.filename, "(.+)%..+")    
         if #numFrames > 0 and rangeType == RangeType.FRAMES then
-                image:saveAs(filename..activeTag.."A0"..".png")
-            end
+            image:saveAs(filename..activeTag.."A0"..".png")
         else 
             print("Error: Invalid")
         end
